@@ -24,7 +24,7 @@ from utils.utils import manual_remap
 MAX_FLOW = 400
 
 # Weight of balanced loss 
-WSL_WEIGHT = 20
+WSL_WEIGHT = 12
 
 def get_device(device='cuda:0'):
     assert isinstance(device, str)
@@ -44,6 +44,8 @@ def get_device(device='cuda:0'):
 def sequence_loss(teacher_preds, student_preds, flow_gt, out_lier, gamma=0.8, max_flow=MAX_FLOW):
     """ Loss function defined over sequence of flow predictions """
 
+    temp = 0
+
     n_predictions = len(teacher_preds)
     tt_loss = 0.0
     ts_loss = 0.0
@@ -57,6 +59,8 @@ def sequence_loss(teacher_preds, student_preds, flow_gt, out_lier, gamma=0.8, ma
         s_loss = torch.sum((student_preds[i] - flow_gt).abs(), dim=1)
         tt_loss += i_weight * (t_loss)
         ts_loss += i_weight * (s_loss)
+        
+        temp += i_weight
 
     tt_loss = tt_loss.view(-1)[valid.view(-1)]
     ts_loss = ts_loss.view(-1)[valid.view(-1)]
@@ -279,7 +283,7 @@ def train(args):
                 rot_next = rot_next * 30
             rot_next.requires_grad = True
 
-            for k in range(80):
+            for k in range(100):
 
                 ll = (2 - (k/50)) * np.sqrt(2)
 
@@ -480,19 +484,13 @@ def train(args):
                 else:
                     other_loss = grid_loss
 
-                if tt_loss < 12 or random_walk:
-                    print('Random walk!')
-                    if not random_walk:
-                        random_work_num = np.random.randint(2, 5)
-                    random_walk = True
+                if k > 15 and np.random.uniform(0, 1) < 0.2:
+                    print('Random walk!')        
                     loss = np.random.uniform(-2, 2) * ts_loss
-                    ranodm_walk_step += 1
-
-                    if ranodm_walk_step == random_work_num:
-                        ranodm_walk_step = 0
-                        random_walk = False
                 else:
                     loss = loss + other_loss
+
+                print(tt_loss)
 
                 if k < 2:
                     if tt_loss > 250:
@@ -512,7 +510,7 @@ def train(args):
 
                 del optimizer, loss
 
-            if best_total_loss < 25:
+            if best_total_loss < 12:
                 save_subset(save_input1*255.0, save_input2*255.0, save_outlier * 255.0, save_gt_flow, save_total_loss, save_ind, args)
                 save_ind += 1
 
@@ -527,7 +525,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--lr', type=float, default=0.00002)
     parser.add_argument('--num_steps', type=int, default=100000)
-    parser.add_argument('--batch_size', type=int, default=12)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--image_size', type=int, nargs='+', default=[384, 512])
     parser.add_argument('--gpus', type=int, nargs='+', default=[0, 1])
     parser.add_argument('--mixed_precision', action='store_true', help='use mixed precision')
