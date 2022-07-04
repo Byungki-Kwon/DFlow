@@ -129,6 +129,8 @@ def train(args):
 
     out_w = 512
     out_h = 384
+    random_walk = False
+    ranodm_walk_step = 0 
 
     while should_keep_training:
         for _, data_blob in enumerate(zip(back_loader, fore_loader)):
@@ -478,7 +480,19 @@ def train(args):
                 else:
                     other_loss = grid_loss
 
-                loss = loss + other_loss
+                if tt_loss < 12 or random_walk:
+                    print('Random walk!')
+                    if not random_walk:
+                        random_work_num = np.random.randint(2, 5)
+                    random_walk = True
+                    loss = np.random.uniform(-2, 2) * ts_loss
+                    ranodm_walk_step += 1
+
+                    if ranodm_walk_step == random_work_num:
+                        ranodm_walk_step = 0
+                        random_walk = False
+                else:
+                    loss = loss + other_loss
 
                 if k < 2:
                     if tt_loss > 250:
