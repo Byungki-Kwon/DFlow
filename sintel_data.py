@@ -83,6 +83,16 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
+def lr_func(k):
+    if k < 30:
+        return 1 - 3 / 100 * k
+    elif 30 <= k < 60:
+        return 1 - 3 / 100 * (k-30)
+    elif 60 <= k < 90:
+        return 1 - 3 / 100 * (k-60)
+    else:
+        return 1 - 3 / 100 * (k-90)
+
 def fetch_optimizer(args, model):
     """ Create the optimizer and learning rate scheduler """
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wdecay, eps=args.epsilon)
@@ -288,30 +298,31 @@ def train(args):
 
             optimizer = optim.Adam(
                     [
-                        {"params": motion_init, "lr": 2 * ll}, # (1,2)
-                        {"params": zoom_init, "lr": 0.002 * ll}, # (1,2)
-                        {"params": rot_init, "lr": 0.01 * ll}, # (1,2)
-                        {"params": motion_next, "lr": 1 * ll}, # (1)
-                        {"params": zoom_next, "lr": 0.02 * ll},
-                        {"params": rot_next, "lr": 0.1 * ll}, # (1,2)
-                        {"params": noise1, "lr": 0.01 * ll},
-                        {"params": noise2, "lr": 0.01 * ll},
-                        {"params": dst_points, 'lr': 0.1 * ll}, # (1,4,2)
-                        {"params": grid_warping1, 'lr': 1 * ll},
-                        {"params": grid_warping2, 'lr': 1 * ll },
-                        {"params": alpha_grid, 'lr': 0.15 * ll},
-                        {"params": fore_offset, 'lr': 0.2 * ll},
-                        {"params": k_sigma_x_bs, 'lr': 0.03 * ll},
-                        {"params": k_sigma_y_bs, 'lr': 0.03 * ll},
-                        {"params": fog_color, 'lr': 0.03 * ll},
-                        {"params": k_angle_bs, 'lr': 0.03 * ll},
-                        {"params": color_change, 'lr': 0.03 * ll}
+                        {"params": motion_init, "lr": 2}, # (1,2)
+                        {"params": zoom_init, "lr": 0.002}, # (1,2)
+                        {"params": rot_init, "lr": 0.01}, # (1,2)
+                        {"params": motion_next, "lr": 1}, # (1)
+                        {"params": zoom_next, "lr": 0.02},
+                        {"params": rot_next, "lr": 0.1}, # (1,2)
+                        {"params": noise1, "lr": 0.01},
+                        {"params": noise2, "lr": 0.01},
+                        {"params": dst_points, 'lr': 0.1}, # (1,4,2)
+                        {"params": grid_warping1, 'lr': 1},
+                        {"params": grid_warping2, 'lr': 1},
+                        {"params": alpha_grid, 'lr': 0.15},
+                        {"params": fore_offset, 'lr': 0.2},
+                        {"params": k_sigma_x_bs, 'lr': 0.03},
+                        {"params": k_sigma_y_bs, 'lr': 0.03},
+                        {"params": fog_color, 'lr': 0.03},
+                        {"params": k_angle_bs, 'lr': 0.03},
+                        {"params": color_change, 'lr': 0.03}
                     ],
-                    lr=0.0001
                 )
+            
+            scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_func)
 
             for k in range(100):
-                
+
                 optimizer.zero_grad()
 
                 update_grid = reference_grid.clone().detach()
@@ -487,13 +498,14 @@ def train(args):
                 else:
                     other_loss = grid_loss
 
-                if k > 15 and np.random.uniform(0, 1) < 0.2:
-                    print('Random walk!')        
-                    loss = np.random.uniform(-2, 2) * ts_loss
-                else:
+                # if k > 15 and np.random.uniform(0, 1) < 0.2:
+                #     print('Random walk!')        
+                #     loss = np.random.uniform(-2, 2) * ts_loss
+                # else:
                     loss = loss + other_loss
-
+                loss = loss + other_loss
                 print(tt_loss)
+                print(scheduler.get_last_lr()[0])
 
                 if k < 2:
                     if tt_loss > 250:
@@ -509,6 +521,7 @@ def train(args):
 
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
             if best_total_loss < 12:
                 save_subset(save_input1*255.0, save_input2*255.0, save_outlier * 255.0, save_gt_flow, save_total_loss, save_ind, args)
