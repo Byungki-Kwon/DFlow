@@ -283,11 +283,10 @@ def train(args):
                 rot_next = rot_next * 30
             rot_next.requires_grad = True
 
-            for k in range(100):
 
-                ll = (2 - (k/50)) * np.sqrt(2)
+            ll = 1
 
-                optimizer = optim.Adam(
+            optimizer = optim.Adam(
                     [
                         {"params": motion_init, "lr": 2 * ll}, # (1,2)
                         {"params": zoom_init, "lr": 0.002 * ll}, # (1,2)
@@ -310,6 +309,10 @@ def train(args):
                     ],
                     lr=0.0001
                 )
+
+            for k in range(100):
+                
+                optimizer.zero_grad()
 
                 update_grid = reference_grid.clone().detach()
                 update_back_rgbs = back_img[:, :3, ...].clone().detach()
@@ -506,9 +509,6 @@ def train(args):
 
                 loss.backward()
                 optimizer.step()
-                optimizer.zero_grad()
-
-                del optimizer, loss
 
             if best_total_loss < 12:
                 save_subset(save_input1*255.0, save_input2*255.0, save_outlier * 255.0, save_gt_flow, save_total_loss, save_ind, args)
