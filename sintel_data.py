@@ -6,16 +6,11 @@ sys.path.append('RAFT')
 
 import argparse
 import os
-import cv2
-import time
 import numpy as np
-import matplotlib.pyplot as plt
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.autograd import Variable
 
 import kornia as K
 
@@ -24,10 +19,11 @@ from syn_dataset import back_dataloader, fore_dataloader
 from utils.syn_utils import generate_refer_grid, generate_kernel_grid, get_parameters, augmentation, save_subset, save_wsl_subset, generate_random_fog, save_tepe_subset
 from utils.object_utils import random_position
 from utils.utils import manual_remap
-from PIL import Image
-# exclude extremly large displacements
+
+# Exclude extremly large displacements
 MAX_FLOW = 400
 
+# Weight of balanced loss 
 WSL_WEIGHT = 20
 
 def get_device(device='cuda:0'):
@@ -47,7 +43,7 @@ def get_device(device='cuda:0'):
 
 def sequence_loss(teacher_preds, student_preds, flow_gt, out_lier, gamma=0.8, max_flow=MAX_FLOW):
     """ Loss function defined over sequence of flow predictions """
-    #
+
     n_predictions = len(teacher_preds)
     tt_loss = 0.0
     ts_loss = 0.0
@@ -65,8 +61,6 @@ def sequence_loss(teacher_preds, student_preds, flow_gt, out_lier, gamma=0.8, ma
     tt_loss = tt_loss.view(-1)[valid.view(-1)]
     ts_loss = ts_loss.view(-1)[valid.view(-1)]
 
-    # wsl_loss = torch.exp(-(ts_loss / tt_loss))
-
     wsl_loss = torch.exp(-(torch.div(ts_loss,tt_loss)))
     wsl_loss = wsl_loss.mean()
 
@@ -77,14 +71,6 @@ def sequence_loss(teacher_preds, student_preds, flow_gt, out_lier, gamma=0.8, ma
 
     tepe = torch.sum((teacher_preds[-1] - flow_gt)**2, dim=1).sqrt().view(-1)[valid.view(-1)].mean()
     sepe = torch.sum((student_preds[-1] - flow_gt)**2, dim=1).sqrt().view(-1)[valid.view(-1)].mean()
-
-
-    # total_loss = 0.5 * (tt_loss * 3*tepe) + wsl_loss * WSL_WEIGHT
-    # total_loss = 0.5 * (tt_loss * 3*tepe) + wsl_loss * WSL_WEIGHT
-    # total_loss = 3*tepe + wsl_loss * WSL_WEIGHT
-
-    # print("total_loss: %.2f | t_loss : %.2f | s_loss : %.2f | wsl_loss : %.2f | t_epe : %.2f | s_epe : %.2f" % (total_loss, tt_loss, ts_loss, wsl_loss, tepe, sepe))
-
 
     return total_loss, tt_loss, ts_loss, tepe, sepe, wsl_loss
 
@@ -108,7 +94,7 @@ def train(args):
     device = get_device(device_str)
 
     student = nn.DataParallel(RAFT(args), device_ids=args.gpus)
-    student_dir = "/home/kwon/eccv/eccv_dupdate/model/manual_remap_modi/best_raft_chairs.pth"
+    student_dir = "./models/best_raft_chairs.pth"
     print(student_dir)
     student.load_state_dict(torch.load(student_dir, map_location=device), strict=False)
     student.to(device)
@@ -116,7 +102,7 @@ def train(args):
     student.module.freeze_bn()
 
     teacher = nn.DataParallel(RAFT(args), device_ids=args.gpus)
-    teacher_dir = "/home/kwon/eccv/eccv_dupdate/model/manual_remap_modi/14000_raft_sintel_noaug_30000.pth"
+    teacher_dir = "./models/14000_raft_sintel_noaug_30000.pth"
     print(teacher_dir)
     teacher.load_state_dict(torch.load(teacher_dir, map_location=device), strict=False)
     teacher.to(device)
@@ -132,39 +118,20 @@ def train(args):
     if not os.path.isdir(args.save_dir):
         os.mkdir(args.save_dir)
 
-    save_tloss_folder = os.path.join(args.save_dir, "best_tloss")
-    if not os.path.isdir(save_tloss_folder):
-        os.mkdir(save_tloss_folder)
+    save_folder = args.save_dir
+    if not os.path.isdir(save_folder):
+        os.mkdir(save_folder)
 
-    save_wsl_folder = os.path.join(args.save_dir, "best_wsl")
-    if not os.path.isdir(save_wsl_folder):
-        os.mkdir(save_wsl_folder)
-
-    save_tepe_folder = os.path.join(args.save_dir, "best_tepe")
-    if not os.path.isdir(save_tepe_folder):
-        os.mkdir(save_tepe_folder)
-
-
-    if int(len(os.listdir(save_tloss_folder))) == 0:
+    if int(len(os.listdir(save_folder))) == 0:
         save_ind = 0
     else:
-        save_ind = int(len(os.listdir(save_tloss_folder)) - 1)
-
-    if int(len(os.listdir(save_wsl_folder))) == 0:
-        save_wsl_ind = 0
-    else:
-        save_wsl_ind = int(len(os.listdir(save_wsl_folder)) - 1)
-
-    if int(len(os.listdir(save_tepe_folder))) == 0:
-        save_tepe_ind = 0
-    else:
-        save_tepe_ind = int(len(os.listdir(save_tepe_folder)) - 1)
+        save_ind = int(len(os.listdir(save_folder)) - 1)
 
     out_w = 512
     out_h = 384
-    kss = 0
+
     while should_keep_training:
-        for i_batch, data_blob in enumerate(zip(back_loader, fore_loader)):
+        for _, data_blob in enumerate(zip(back_loader, fore_loader)):
 
             if (save_ind+1) % 1000 == 0:
                 print('%d number image save!' % save_ind)
@@ -201,7 +168,6 @@ def train(args):
             if is_first:
                 reference_grid, _ = generate_refer_grid(back_img, 1)
                 reference_grid = reference_grid.permute(0, 3, 1, 2).to(device)[0:1]
-
                 is_first = False
 
             motion_init = torch.zeros([1, 2], device=device)
@@ -246,12 +212,9 @@ def train(args):
             fore_offset.requires_grad = True
 
             # real world effects
-
             color_change = (torch.rand(size=(fore_num+1, 3, 1, 1), dtype=torch.float32, device=device) - 0.5) * 2
             color_change.requires_grad = True
-
             is_color_change = torch.rand(size=(fore_num+1, 1), dtype=torch.float32, device=device).squeeze() < 0.5
-
 
             noise1 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) * 0.01
             valid_noise1 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) < np.random.uniform(0.00, 0.2)
@@ -307,7 +270,6 @@ def train(args):
             do_noise = np.random.uniform(0, 1) < 0.5
             do_large_rot = np.random.uniform(0, 1) < 0.5
             do_color_change = np.random.uniform(0, 1) < 0.5
-
 
             if do_large_rot:
                 rot_next = rot_next * 5
@@ -499,24 +461,6 @@ def train(args):
 
                 pre_gt_flow = flow
 
-                # save_im1 = Image.fromarray(
-                #     np.asarray(pre_input1[k].permute(1, 2, 0).detach().cpu() * 255.0, dtype=np.uint8), "RGB")
-                # save_im2 = Image.fromarray(
-                #     np.asarray(pre_input2[k].permute(1, 2, 0).detach().cpu() * 255.0, dtype=np.uint8), "RGB")
-                # save_flo = np.asarray(pre_gt_flow[k].permute(1, 2, 0).detach().cpu() * 64, dtype=np.int16)
-                #
-                # refer_name = "./check" + "/%02d_0.jpg" % kss
-                # next_name = "./check" + "/%02d_1.jpg" % kss
-                # flow_name = "./check" + "/%02d_flow" % kss
-                #
-                # save_im1.save(refer_name)
-                # save_im2.save(next_name)
-                # np.save(flow_name, save_flo)
-                #
-                # kss +=1
-                # break
-
-
                 input1, input2, gt_flow, loss_measure_outlier = augmentation(pre_input1, pre_input2, pre_gt_flow, outlier, batch_size=6)
 
                 input1 = input1 * 255.0
@@ -548,22 +492,6 @@ def train(args):
                     save_outlier = outlier.repeat(1,3,1,1).detach().cpu()
                     save_total_loss = tt_loss.detach().cpu()
 
-                if tt_loss < 30 and wsl_loss < best_wsl:
-                    best_wsl = wsl_loss
-                    save_wsl_input1 = pre_input1.detach().cpu()
-                    save_wsl_input2 = pre_input2.detach().cpu()
-                    save_wsl_gt_flow = pre_gt_flow.detach().cpu()
-                    save_outlier = outlier.repeat(1,3,1,1).detach().cpu()
-                    save_wsl_loss = wsl_loss.detach().cpu()
-
-                if tepe <= best_tepe:
-                    best_tepe = tepe
-                    save_tepe_input1 = pre_input1.detach().cpu()
-                    save_tepe_input2 = pre_input2.detach().cpu()
-                    save_tepe_gt_flow = pre_gt_flow.detach().cpu()
-                    save_outlier = outlier.repeat(1,3,1,1).detach().cpu()
-                    save_tepe_loss = tepe.detach().cpu()
-
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
@@ -573,15 +501,6 @@ def train(args):
             if best_total_loss < 25:
                 save_subset(save_input1*255.0, save_input2*255.0, save_outlier * 255.0, save_gt_flow, save_total_loss, save_ind, args)
                 save_ind += 1
-
-            if best_wsl < 0.27:
-                save_wsl_subset(save_wsl_input1*255.0, save_wsl_input2*255.0, save_outlier * 255.0, save_wsl_gt_flow, save_wsl_loss, save_wsl_ind, args)
-                save_wsl_ind += 1
-
-            if best_tepe < 2.55:
-                save_tepe_subset(save_tepe_input1 * 255.0, save_tepe_input2 * 255.0, save_outlier * 255.0, save_tepe_gt_flow, save_tepe_loss,
-                                save_tepe_ind, args)
-                save_tepe_ind += 1
 
 
 if __name__ == '__main__':
