@@ -136,8 +136,8 @@ def train(args):
             if (save_ind+1) % 1000 == 0:
                 print('%d number image save!' % save_ind)
 
-            if save_ind == 20000:
-                print("save 20000 images, finish")
+            if save_ind == 1130:
+                print("save 1130 images, finish")
                 exit()
 
             fore_num = np.random.randint(8, 13)
@@ -279,7 +279,7 @@ def train(args):
 
             for k in range(80):
 
-                ll = (2 - (k/50))
+                ll = (2 - (k/50)) * np.sqrt(2)
 
                 optimizer = optim.Adam(
                     [
@@ -513,12 +513,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--lr', type=float, default=0.00002)
     parser.add_argument('--num_steps', type=int, default=100000)
-    parser.add_argument('--batch_size', type=int, default=6)
+    parser.add_argument('--batch_size', type=int, default=12)
     parser.add_argument('--image_size', type=int, nargs='+', default=[384, 512])
     parser.add_argument('--gpus', type=int, nargs='+', default=[0, 1])
     parser.add_argument('--mixed_precision', action='store_true', help='use mixed precision')
 
-    parser.add_argument('--iters', type=int, default=12)
+    parser.add_argument('--iters', type=int, default=4)
     parser.add_argument('--wdecay', type=float, default=.00005)
     parser.add_argument('--epsilon', type=float, default=1e-8)
     parser.add_argument('--clip', type=float, default=1.0)
