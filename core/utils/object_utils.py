@@ -7,6 +7,8 @@ import os
 
 def random_position(back_img, fore_alphas, device):
 
+    offset = 0
+
     b, c, h, w = back_img.shape
     fore_num, cc, sh, sw = fore_alphas.shape
 
@@ -17,8 +19,8 @@ def random_position(back_img, fore_alphas, device):
     positions = np.zeros(fore_num*2)
     for i in range(1, fore_num+1):
 
-        r_h = np.random.randint(40, h-sh-40) # random position h
-        r_w = np.random.randint(40, w-sw-40) # ranodm position w
+        r_h = np.random.randint(offset, h-sh-offset) # random position h
+        r_w = np.random.randint(offset, w-sw-offset) # ranodm position w
 
         alphas[0, i, r_h:r_h+sh, r_w:r_w+sw] = fore_alphas[i-1, -1, ...]
 

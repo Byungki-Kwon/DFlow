@@ -17,10 +17,10 @@ class backDataset(data.Dataset):
         self.h_hlip = []
         self.gauss = []
         self.gen_index = 0
-        self.h_size = 684
-        self.w_size = 812
-        self.crop_h_size = 584
-        self.crop_w_size = 712
+        self.h_size = 720 + 200 + 100 
+        self.w_size = 1280 + 200 + 100
+        self.crop_h_size = 720 + 200
+        self.crop_w_size = 1280 + 200
     def __getitem__(self, index):
 
         img = Image.open(self.image_list[index])
@@ -100,7 +100,7 @@ def back_dataloader():
     monkaa_data = MonKaa()
     print('Use %d MonKaa as background!' % len(monkaa_data))
     total_dataset = coco_data + openimages_data + davis_data + monkaa_data
-    back_loader = data.DataLoader(total_dataset, num_workers=0, batch_size=1+13+6, pin_memory=False, shuffle=True, drop_last=True)
+    back_loader = data.DataLoader(total_dataset, num_workers=0, batch_size=1+8+4, pin_memory=False, shuffle=True, drop_last=True)
 
     return back_loader
 
@@ -110,7 +110,7 @@ class foreData(data.Dataset):
                  root="/local_data/kwon/dupdate_images/voc_non_processing/"):
         super(foreData, self).__init__()
 
-        self.fore_size = 220
+        self.fore_size = 360
         self.imgs = []
         self.h_hlip = []
         self.h_size = []
@@ -137,7 +137,7 @@ class foreData(data.Dataset):
 
         _, h, w = img.shape
         max_len = max(h, w)
-        s_limit = min(200 / max_len, 2)
+        s_limit = min(360 / max_len, 2)
         s_min = min(0.8, 0.7 * s_limit)
 
         s_factor = np.random.uniform(low=s_min, high=s_limit)
@@ -164,7 +164,7 @@ class foreData(data.Dataset):
 def fore_dataloader():
     fore_dataset = foreData()
     print('Use %d VOC as foreground!' % len(fore_dataset))
-    fore_loader = data.DataLoader(fore_dataset, batch_size=13+6, num_workers=0, pin_memory=False, shuffle=True, drop_last=True)
+    fore_loader = data.DataLoader(fore_dataset, batch_size=8+4, num_workers=0, pin_memory=False, shuffle=True, drop_last=True)
 
     return fore_loader
 

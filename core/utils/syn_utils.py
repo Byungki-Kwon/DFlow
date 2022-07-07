@@ -298,8 +298,8 @@ def fore_saves_modi_four(ref_img, next_img, flows, outlier, param, save_ind, arg
 def get_parameters(device):
     rand_motions = ((torch.rand((1, 2), dtype=torch.float32, device=device) - 0.5) * 2)
     affine_centers = ((torch.rand((1, 2), dtype=torch.float32, device=device) - 0.5) * 2)
-    zoom_factors = torch.rand((1, 2), dtype=torch.float32, device=device) * 0.38 + 0.75
-    rotations = ((torch.rand((1,), dtype=torch.float32, device=device) - 0.5) * 2)
+    zoom_factors = torch.rand((1, 2), dtype=torch.float32, device=device) * 0.5 + 0.75
+    rotations = ((torch.rand((1,), dtype=torch.float32, device=device) - 0.5) * 60)
 
     return rand_motions, affine_centers, zoom_factors, rotations
 
@@ -350,8 +350,8 @@ def augmentation(input1, input2, flow, outliers, batch_size):
             img2 = aug(img2, params=aug._params)
 
         size_min_scale = np.maximum(
-            (368 + 8) / float(ht),
-            (496 + 8) / float(wd))
+            (672 + 8) / float(ht),
+            (1200 + 8) / float(wd))
 
         max_scale = 1.0
         min_scale = 0.1
@@ -400,13 +400,13 @@ def augmentation(input1, input2, flow, outliers, batch_size):
 
         bb, cc, hh, ww = img1.shape
 
-        y0 = np.random.randint(0, hh - 368)
-        x0 = np.random.randint(0, ww - 496)
+        y0 = np.random.randint(0, hh - 672)
+        x0 = np.random.randint(0, ww - 1200)
 
-        output1 = img1[:, :, y0:y0+368, x0:x0+496]
-        output2 = img2[:, :, y0:y0+368, x0:x0+496]
-        output_flo = gt_flo[:, :, y0:y0+368, x0:x0+496]
-        out_outlier = outlier[:, :, y0:y0+368, x0:x0+496]
+        output1 = img1[:, :, y0:y0+672, x0:x0+1200]
+        output2 = img2[:, :, y0:y0+672, x0:x0+1200]
+        output_flo = gt_flo[:, :, y0:y0+672, x0:x0+1200]
+        out_outlier = outlier[:, :, y0:y0+672, x0:x0+1200]
 
         augmented_input1.append(output1)
         augmented_input2.append(output2)

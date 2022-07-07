@@ -141,8 +141,8 @@ def train(args):
     else:
         save_ind = int(len(os.listdir(save_folder)) - 1)
 
-    out_w = 512
-    out_h = 384
+    out_w = 1280
+    out_h = 720
     random_walk = False
     ranodm_walk_step = 0 
 
@@ -156,25 +156,26 @@ def train(args):
                 print("save 1130 images, finish")
                 exit()
 
-            fore_num = np.random.randint(8, 13)
-            motion_blur_mask_num = np.random.randint(3, 6)
+            fore_num = np.random.randint(6, 8)
+            motion_blur_mask_num = np.random.randint(2, 4)
 
             source_imgs = data_blob[0].to(device)
-            back_img = source_imgs[:1]
-            fore_rgbs = source_imgs[1:fore_num+1][:, :3, ...]
-            fore_alphas = data_blob[1].to(device)[:fore_num+motion_blur_mask_num]
+            back_img = source_imgs[:1] # background image
+            fore_rgbs = source_imgs[1:fore_num+1][:, :3, ...] # foreground rgb
+            fore_alphas = data_blob[1].to(device)[:fore_num+motion_blur_mask_num] # foreground alpha + motion blur alpha
             total_alphas = random_position(back_img, fore_alphas, device).permute(1, 0, 2, 3)
             back_alpha, fore_alphas, motion_blur_masks = torch.split(total_alphas, [1, fore_num, motion_blur_mask_num], 0)
 
             motion_blur_mask = torch.sum(motion_blur_masks, dim=0, keepdim=True).clamp(0, 1)
-            scale_fac = np.random.uniform(1.5, 3)
+            scale_fac = np.random.uniform(1.1, 2.4)
             motion_blur_mask = F.interpolate(motion_blur_mask, scale_factor=scale_fac, mode='bilinear', align_corners=True)
 
             _, _, ah, aw = motion_blur_mask.shape
 
-            sh = np.random.randint(0, ah-584)
-            sw = np.random.randint(0, aw-712)
-            motion_blur_mask = motion_blur_mask[:, :, sh:sh+584, sw:sw+712]
+            print(motion_blur_mask.shape)
+            sh = np.random.randint(0, ah-920)
+            sw = np.random.randint(0, aw-1480)
+            motion_blur_mask = motion_blur_mask[:, :, sh:sh+920, sw:sw+1480]
 
             b, c, h, w = back_img.shape
 
@@ -199,32 +200,29 @@ def train(args):
             center_init.requires_grad = True
 
             motion_next, _, zoom_next, rot_next = get_parameters(device)
-            motion_next[:, 0] = motion_next[:, 0] * 80
-            motion_next[:, 1] = motion_next[:, 1] * 50
+            motion_next[:, 0] = motion_next[:, 0] * 150
+            motion_next[:, 1] = motion_next[:, 1] * 150
             center_next = torch.zeros([1, 2], device=device)
 
             center_next.requires_grad = True
             motion_next.requires_grad = True
             zoom_next.requires_grad = True
 
-            srt_points = torch.tensor([[-w//2, -h//2], [w//2, -h//2], [-w//2, h//2], [w//2, h//2]], dtype=torch.float32, device=device).unsqueeze(0)
-            dst_points = torch.tensor([[-w//2, -h//2], [w//2, -h//2], [-w//2, h//2], [w//2, h//2]], dtype=torch.float32, device=device).unsqueeze(0)
-            srt_points = srt_points + (torch.rand_like(srt_points, dtype=torch.float32, device=device) - 0.5) * 50
-            dst_points = dst_points + (torch.rand_like(dst_points, dtype=torch.float32, device=device) - 0.5) * 50
+            # srt_points = torch.tensor([[-w//2, -h//2], [w//2, -h//2], [-w//2, h//2], [w//2, h//2]], dtype=torch.float32, device=device).unsqueeze(0)
+            # dst_points = torch.tensor([[-w//2, -h//2], [w//2, -h//2], [-w//2, h//2], [w//2, h//2]], dtype=torch.float32, device=device).unsqueeze(0)
+            # srt_points = srt_points + (torch.rand_like(srt_points, dtype=torch.float32, device=device) - 0.5) * 50
+            # dst_points = dst_points + (torch.rand_like(dst_points, dtype=torch.float32, device=device) - 0.5) * 50
 
-            srt_points.requires_grad = True
-            dst_points.requires_grad = True
+            # srt_points.requires_grad = True
+            # dst_points.requires_grad = True
 
-            grid_warping1 = torch.zeros([1, 2, 8, 12], dtype=torch.float32, device=device)
-            grid_warping2 = torch.zeros([1, 2, 8, 12], dtype=torch.float32, device=device)
+            grid_warping1 = (torch.rand([1, 2, 8, 12], dtype=torch.float32, device=device) - 0.5) * 20
+            grid_warping2 = (torch.rand([1, 2, 8, 12], dtype=torch.float32, device=device) - 0.5) * 20
 
             grid_warping1.requires_grad = True
             grid_warping2.requires_grad = True
 
-            alpha_grid = torch.zeros([fore_num, 2, 8, 12], dtype=torch.float32, device=device)
-            alpha_grid.requires_grad = True
-
-            fore_offset = (torch.rand(size=(1, (fore_num)*2, 1, 1), dtype=torch.float32, device=device) - 0.5) * 100
+            fore_offset = (torch.rand(size=(1, (fore_num)*2, 1, 1), dtype=torch.float32, device=device) - 0.5) * 200
             fore_offset.requires_grad = True
 
             # real world effects
@@ -232,19 +230,19 @@ def train(args):
             color_change.requires_grad = True
             is_color_change = torch.rand(size=(fore_num+1, 1), dtype=torch.float32, device=device).squeeze() < 0.5
 
-            noise1 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) * 0.01
-            valid_noise1 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) < np.random.uniform(0.00, 0.2)
-            valid_noise1 = K.filters.box_blur(valid_noise1 * 1.0, kernel_size=(3, 3))
-            noise2 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) * 0.01
-            valid_noise2 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) < np.random.uniform(0.00, 0.2)
-            valid_noise2 = K.filters.box_blur(valid_noise2 * 1.0, kernel_size=(3, 3))
+            # noise1 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) * 0.01
+            # valid_noise1 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) < np.random.uniform(0.00, 0.2)
+            # valid_noise1 = K.filters.box_blur(valid_noise1 * 1.0, kernel_size=(3, 3))
+            # noise2 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) * 0.01
+            # valid_noise2 = torch.rand(size=(1, 3, out_h, out_w), dtype=torch.float32, device=device) < np.random.uniform(0.00, 0.2)
+            # valid_noise2 = K.filters.box_blur(valid_noise2 * 1.0, kernel_size=(3, 3))
             texture_noise = torch.rand(size=(1, 3, 8, 24), dtype=torch.float32, device=device) * 0
 
-            noise1.requires_grad = True
-            noise2.requires_grad = True
+            # noise1.requires_grad = True
+            # noise2.requires_grad = True
             texture_noise.requires_grad = True
-            valid_noise1.requires_grad = True
-            valid_noise2.requires_grad = True
+            # valid_noise1.requires_grad = True
+            # valid_noise2.requires_grad = True
 
             layer_list = []
             layer_ind = 6
@@ -256,8 +254,6 @@ def train(args):
 
             print('New Image!')
             best_total_loss = 30
-            best_wsl = 0.27
-            best_tepe = 2.55
 
             """ Motion Blur Kernel 구현 """
             k_size = 35
@@ -266,7 +262,7 @@ def train(args):
 
             k_sigma_x_bs = torch.rand(size=(1, 1, 1), dtype=torch.float32, device=device) * 4 - 2
             k_sigma_y_bs = torch.rand(size=(1, 1, 1), dtype=torch.float32, device=device) * 4 - 2
-            k_angle_bs = torch.rand(size=(1, 1), dtype=torch.float32, device=device).squeeze(1) * 4 - 2
+            k_angle_bs = torch.rand(size=(1, 1), dtype=torch.float32, device=device).squeeze(1) * 90
 
             k_sigma_x_bs.requires_grad = True
             k_sigma_y_bs.requires_grad = True
@@ -284,17 +280,9 @@ def train(args):
             do_motion_blur = np.random.uniform(0, 1) < 0.5
             do_fog = np.random.uniform(0, 1) < 0.5
             do_noise = np.random.uniform(0, 1) < 0.5
-            do_large_rot = np.random.uniform(0, 1) < 0.5
             do_color_change = np.random.uniform(0, 1) < 0.5
 
-            if do_large_rot:
-                rot_next = rot_next * 5
-            else:
-                rot_next = rot_next * 30
             rot_next.requires_grad = True
-
-
-            ll = 1
 
             optimizer = optim.Adam(
                     [
@@ -304,12 +292,10 @@ def train(args):
                         {"params": motion_next, "lr": 1}, # (1)
                         {"params": zoom_next, "lr": 0.02},
                         {"params": rot_next, "lr": 0.1}, # (1,2)
-                        {"params": noise1, "lr": 0.01},
-                        {"params": noise2, "lr": 0.01},
-                        {"params": dst_points, 'lr': 0.1}, # (1,4,2)
+                        # {"params": noise1, "lr": 0.01},
+                        # {"params": noise2, "lr": 0.01},
                         {"params": grid_warping1, 'lr': 1},
                         {"params": grid_warping2, 'lr': 1},
-                        {"params": alpha_grid, 'lr': 0.15},
                         {"params": fore_offset, 'lr': 0.2},
                         {"params": k_sigma_x_bs, 'lr': 0.03},
                         {"params": k_sigma_y_bs, 'lr': 0.03},
@@ -370,8 +356,7 @@ def train(args):
                 next_update_features = manual_remap(update_feature, torch.stack([wu_update_grid1_x, wu_update_grid1_y], dim=-1))
 
                 amat_next = K.geometry.transform.get_affine_matrix2d(motion_next, center_next, zoom_next, rot_next)
-                pmat_next = K.geometry.get_perspective_transform(srt_points, dst_points) # perspective matrix
-                apmat_next = torch.matmul(amat_next[0], pmat_next[0]).unsqueeze(0) # affine + perspective matrix
+                apmat_next = amat_next # affine
 
                 """
                 각 foreground 마다 가져오고싶은 grid를 다시 설정해줌
@@ -433,7 +418,7 @@ def train(args):
                     k_sigma_x_as = torch.sigmoid(k_sigma_x_bs) * 8 + 3
                     k_sigma_y_as = torch.sigmoid(k_sigma_y_bs) * 1 + 1
 
-                    k_angle_as = torch.sigmoid(k_angle_bs) * 90
+                    k_angle_as = k_angle_bs
 
                     k_rotated_grid = K.geometry.rotate(k_origin_grid.permute(0, 3, 1, 2), k_angle_as).permute(0, 2, 3, 1)[:,k_offset:-k_offset, k_offset:-k_offset, :]
                     gauss_x = - k_rotated_grid[..., 0] ** 2 / (2 * k_sigma_x_as ** 2)
@@ -472,17 +457,19 @@ def train(args):
                 next_rgb = next_rgb[:, :, cut_h:-cut_h, cut_w:-cut_w]
                 flow = flow[:, :, cut_h:-cut_h, cut_w:-cut_w]
 
-                if do_noise:
-                    pre_input1 = (refer_rgb + noise1*valid_noise1).clamp(0, 1.0)
-                    pre_input2 = (next_rgb + noise2*valid_noise2).clamp(0, 1.0)
-                else:
-                    pre_input1 = refer_rgb.clamp(0, 1.0)
-                    pre_input2 = next_rgb.clamp(0, 1.0)
+                # if do_noise:
+                #     pre_input1 = (refer_rgb + noise1*valid_noise1).clamp(0, 1.0)
+                #     pre_input2 = (next_rgb + noise2*valid_noise2).clamp(0, 1.0)
+                # else:
+                #     pre_input1 = refer_rgb.clamp(0, 1.0)
+                #     pre_input2 = next_rgb.clamp(0, 1.0)
+                pre_input1 = refer_rgb.clamp(0, 1.0)
+                pre_input2 = next_rgb.clamp(0, 1.0)
 
                 pre_gt_flow = flow
 
-                input1, input2, gt_flow, loss_measure_outlier = augmentation(pre_input1, pre_input2, pre_gt_flow, outlier, batch_size=6)
-
+                input1, input2, gt_flow, loss_measure_outlier = augmentation(pre_input1, pre_input2, pre_gt_flow, outlier, batch_size=2)
+                
                 input1 = input1 
                 input2 = input2
 
@@ -492,20 +479,15 @@ def train(args):
                 loss, tt_loss, ts_loss, tepe, sepe, wsl_loss = sequence_loss(teacher_flow, student_flow, gt_flow, loss_measure_outlier)
                 grid_loss = F.relu(wu_update_grid2[:, :, :-1, ...] - wu_update_grid2[:, :, 1:, :]).mean() + F.relu(wu_update_grid2[:, :, :, :-1] - wu_update_grid2[:, :, :, 1:]).mean()
 
-                if do_noise:
-                    noise_regular = (noise1 * valid_noise1).abs().mean() + (noise2 * valid_noise2).abs().mean()
-                    other_loss = grid_loss + noise_regular
-                else:
-                    other_loss = grid_loss
+                # if do_noise:
+                #     # noise_regular = (noise1 * valid_noise1).abs().mean() + (noise2 * valid_noise2).abs().mean()
+                #     other_loss = grid_loss + noise_regular
+                # else:
+                #     other_loss = grid_loss
+                other_loss = grid_loss
 
-                if k > 15 and np.random.uniform(0, 1) < 0.2:
-                    print('Random walk!')        
-                    loss = np.random.uniform(-2, 2) * ts_loss
-                else:
-                    loss = loss + other_loss
-                # loss = loss + other_loss
+                loss = loss + other_loss
                 print(tt_loss)
-                print(scheduler.get_last_lr()[0])
 
                 if k < 2:
                     if tt_loss > 250:
