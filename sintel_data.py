@@ -483,8 +483,8 @@ def train(args):
 
                 input1, input2, gt_flow, loss_measure_outlier = augmentation(pre_input1, pre_input2, pre_gt_flow, outlier, batch_size=6)
 
-                input1 = input1 * 255.0
-                input2 = input2 * 255.0
+                input1 = input1 
+                input2 = input2
 
                 student_flow = student(input1, input2, iters=args.iters)
                 teacher_flow = teacher(input1, input2, iters=args.iters)
@@ -498,12 +498,12 @@ def train(args):
                 else:
                     other_loss = grid_loss
 
-                # if k > 15 and np.random.uniform(0, 1) < 0.2:
-                #     print('Random walk!')        
-                #     loss = np.random.uniform(-2, 2) * ts_loss
-                # else:
+                if k > 15 and np.random.uniform(0, 1) < 0.2:
+                    print('Random walk!')        
+                    loss = np.random.uniform(-2, 2) * ts_loss
+                else:
                     loss = loss + other_loss
-                loss = loss + other_loss
+                # loss = loss + other_loss
                 print(tt_loss)
                 print(scheduler.get_last_lr()[0])
 
