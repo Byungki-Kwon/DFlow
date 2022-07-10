@@ -424,10 +424,10 @@ def augmentation(input1, input2, flow, outliers, ds, batch_size):
             (672 + 8) / float(ht),
             (1200 + 8) / float(wd))    
 
-        max_scale = 0.75
-        min_scale = 0.
+        max_scale = 1.0
+        min_scale = 0.1
 
-        scale = 2 ** np.random.uniform(size_min_scale, max_scale)
+        scale = 2 ** np.random.uniform(min_scale, max_scale)
         scale_x = scale
         scale_y = scale
 
