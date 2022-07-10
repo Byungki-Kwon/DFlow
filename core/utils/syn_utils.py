@@ -295,13 +295,79 @@ def fore_saves_modi_four(ref_img, next_img, flows, outlier, param, save_ind, arg
         np.save(save_name, param[key])
     print('check is over')
 
-def get_parameters(device):
-    rand_motions = ((torch.rand((1, 2), dtype=torch.float32, device=device) - 0.5) * 2)
-    affine_centers = ((torch.rand((1, 2), dtype=torch.float32, device=device) - 0.5) * 2)
-    zoom_factors = torch.rand((1, 2), dtype=torch.float32, device=device) * 0.5 + 0.75
-    rotations = ((torch.rand((1,), dtype=torch.float32, device=device) - 0.5) * 60)
+def get_parameters(device, init=False):
+    
 
-    return rand_motions, affine_centers, zoom_factors, rotations
+    rand_motions = ((torch.rand((2,), dtype=torch.float32, device=device) - 0.5) * 75)
+    zoom_factors = torch.rand((2,), dtype=torch.float32, device=device) * 0.5 + 0.75
+    rotations = torch.zeros((2,), dtype=torch.float32, device=device)
+    theta = (torch.rand((1,)) - 0.5) * np.pi / 6
+
+    if init:
+        rand_motions = rand_motions * 0.1
+        zoom_factors = torch.sign(zoom_factors-1) * torch.abs(zoom_factors -1) * 0.1 + 1.0
+        theta = theta * 0.1
+    
+    print(zoom_factors)
+    print(rotations.shape)
+    rotations[0] = torch.cos(theta)
+    rotations[1] = torch.sin(theta)
+
+    return rand_motions, zoom_factors, rotations
+
+
+# def affine_warp(grid, translation, zoom, rotation, device, srt_points=None, dst_points=None):
+#     zoom_mat = torch.zeros((2, 2), dtype=torch.float32).to(device)
+#     zoom_mat[0, 0] = zoom[0]
+#     zoom_mat[1, 1] = zoom[1]
+
+#     rot_mat = torch.zeros((2, 2), dtype=torch.float32).to(device)
+#     rot_normalized = rotation / torch.sqrt(rotation[0]**2 + rotation[1] ** 2)
+#     rot_mat[0, 0] = rot_normalized[0]
+#     rot_mat[0, 1] = rot_normalized[1]
+#     rot_mat[1, 0] = -rot_normalized[1]
+#     rot_mat[1, 1] = rot_normalized[0]
+
+#     if srt_points is not None:
+
+#         pmat_next = K.geometry.get_perspective_transform(srt_points, dst_points) # perspective matrix
+#         import pdb
+#         pdb.set_trace()
+
+#     warped_grid = torch.matmul(grid.permute(0, 2, 3, 1), torch.matmul(zoom_mat, rot_mat)) + translation[None, :]
+    
+#     return warped_grid.permute(0, 3, 1, 2)
+
+#     import pdb
+#     pdb.set_trace()
+
+def affine_warp(grid, translation, zoom, rotation, device, srt_points=None, dst_points=None):
+    
+    augmented_grid = torch.cat([grid, torch.ones_like(grid[:, :1, ...])], dim=1)
+
+    zoom_mat = torch.zeros((3, 3), dtype=torch.float32, device=device)
+    zoom_mat[0, 0] = zoom[0]
+    zoom_mat[1, 1] = zoom[1]
+    zoom_mat[2, 2] = 1
+
+    rot_mat = torch.zeros((3, 3), dtype=torch.float32, device=device)
+    rot_normalized = rotation / torch.sqrt(rotation[0]**2 + rotation[1] ** 2)
+    rot_mat[0, 0] = rot_normalized[0]
+    rot_mat[0, 1] = rot_normalized[1]
+    rot_mat[1, 0] = -rot_normalized[1]
+    rot_mat[1, 1] = rot_normalized[0]
+    rot_mat[2, 2] = 1
+
+    if srt_points is not None:
+        pmat_next = K.geometry.get_perspective_transform(srt_points, dst_points) # perspective matrix
+        warped_grid = torch.matmul(augmented_grid.permute(0, 2, 3, 1), torch.matmul(torch.matmul(zoom_mat, rot_mat), pmat_next[0]))[..., :2] + translation[None, :]
+    else:
+        warped_grid = torch.matmul(augmented_grid.permute(0, 2, 3, 1), torch.matmul(zoom_mat, rot_mat))[..., :2] + translation[None, :]
+    
+    return warped_grid.permute(0, 3, 1, 2)
+
+
+    
 
 
 def get_back_parameters(device):
@@ -315,7 +381,7 @@ def get_back_parameters(device):
     return rand_motions, affine_centers, zoom_factors, rotations
 
 
-def augmentation(input1, input2, flow, outliers, batch_size):
+def augmentation(input1, input2, flow, outliers, ds, batch_size):
     input1 = input1.repeat(batch_size, 1, 1, 1)
     input2 = input2.repeat(batch_size, 1, 1, 1)
     flow = flow.repeat(batch_size, 1, 1, 1)
@@ -335,34 +401,35 @@ def augmentation(input1, input2, flow, outliers, batch_size):
         b, c, ht, wd = img1.shape
 
         asymmetric_color_aug_prob = np.random.uniform(0, 1) < 0.2
-        stretch_prob = np.random.uniform(0, 1) < 0.8
         spatial_aug_prob = np.random.uniform(0, 1) < 0.8
         h_flip_prob = np.random.uniform(0, 1) < 0.5
         max_stretch = 0.2
 
         if asymmetric_color_aug_prob:
-            aug = K.augmentation.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.125 / 3.14, p=1.0)
+            aug = K.augmentation.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.25 / 3.14, p=1.0)
             img1 = aug(img1)
             img2 = aug(img2)
         else:
-            aug = K.augmentation.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.125 / 3.14, p=1.0)
+            aug = K.augmentation.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.25 / 3.14, p=1.0)
             img1 = aug(img1)
             img2 = aug(img2, params=aug._params)
 
+        # size_min_scale = np.maximum(
+        #     (ds[3] + 8) / float(ht),
+        #     (ds[2] + 8) / float(wd))
+
+        # import pdb
+        # pdb.set_trace()
         size_min_scale = np.maximum(
             (672 + 8) / float(ht),
-            (1200 + 8) / float(wd))
+            (1200 + 8) / float(wd))    
 
-        max_scale = 1.0
-        min_scale = 0.1
+        max_scale = 0.75
+        min_scale = 0.
 
-        scale = 2 ** np.random.uniform(min_scale, max_scale)
+        scale = 2 ** np.random.uniform(size_min_scale, max_scale)
         scale_x = scale
         scale_y = scale
-
-        if stretch_prob:
-            scale_x *= 2 ** np.random.uniform(-max_stretch, max_stretch)
-            scale_y *= 2 ** np.random.uniform(-max_stretch, max_stretch)
 
         scale_x = np.clip(scale_x, size_min_scale, None)
         scale_y = np.clip(scale_y, size_min_scale, None)
@@ -400,13 +467,13 @@ def augmentation(input1, input2, flow, outliers, batch_size):
 
         bb, cc, hh, ww = img1.shape
 
-        y0 = np.random.randint(0, hh - 672)
-        x0 = np.random.randint(0, ww - 1200)
+        y0 = np.random.randint(0, hh - ds[3])
+        x0 = np.random.randint(0, ww - ds[2])
 
-        output1 = img1[:, :, y0:y0+672, x0:x0+1200]
-        output2 = img2[:, :, y0:y0+672, x0:x0+1200]
-        output_flo = gt_flo[:, :, y0:y0+672, x0:x0+1200]
-        out_outlier = outlier[:, :, y0:y0+672, x0:x0+1200]
+        output1 = img1[:, :, y0:y0+ds[3], x0:x0+ds[2]]
+        output2 = img2[:, :, y0:y0+ds[3], x0:x0+ds[2]]
+        output_flo = gt_flo[:, :, y0:y0+ds[3], x0:x0+ds[2]]
+        out_outlier = outlier[:, :, y0:y0+ds[3], x0:x0+ds[2]]
 
         augmented_input1.append(output1)
         augmented_input2.append(output2)
@@ -424,19 +491,20 @@ def augmentation(input1, input2, flow, outliers, batch_size):
 def generate_random_fog(back_img, device):
 
     _, _, h, w = back_img.shape
-    a4 = torch.empty(h // 64, w // 64).normal_(mean=0, std=7).unsqueeze(0).unsqueeze(0).to(device)
-    a3 = torch.empty(h // 32, w // 32).normal_(mean=0, std=5).unsqueeze(0).unsqueeze(0).to(device)
+
+    w1 = np.random.uniform(0, 1)
+    w2 = np.random.uniform(0, 1)
+    a4 = torch.empty(h // 64, w // 128).normal_(mean=0, std=7).unsqueeze(0).unsqueeze(0).to(device) + w1 * torch.empty(h//64, w//128).normal_(mean=0, std=7).unsqueeze(0).unsqueeze(0).to(device)
+    a3 = torch.empty(h // 32, w // 32).normal_(mean=0, std=5).unsqueeze(0).unsqueeze(0).to(device) + w2 * torch.empty(h//32, w//32).normal_(mean=0, std=5).unsqueeze(0).unsqueeze(0).to(device)
     a2 = torch.empty(h // 16, w // 32).normal_(mean=0, std=3).unsqueeze(0).unsqueeze(0).to(device)
     a1 = torch.empty(h // 8, w // 16).normal_(mean=0, std=2).unsqueeze(0).unsqueeze(0).to(device)
-    a = torch.empty(h // 4, w // 4).normal_(mean=0, std=0.5).unsqueeze(0).unsqueeze(0).to(device)
-    b = torch.empty(h // 2, w // 2).normal_(mean=0, std=0.25).unsqueeze(0).unsqueeze(0).to(device)
 
-    Fog = F.interpolate(b, size=(h, w)) + F.interpolate(a, size=(h, w)) + F.interpolate(a2, size=(h, w),mode='bilinear') + \
+    Fog = F.interpolate(a2, size=(h, w),mode='bilinear') + \
           F.interpolate(a1, size=(h, w), mode='bilinear') + F.interpolate(a3, size=(h, w), mode='bilinear') \
           + F.interpolate(a4, size=(h, w),mode='bilinear')
-    Fog = Fog / torch.max(Fog)
+    Fog = Fog / torch.quantile(Fog, 0.98)
 
-    random_fog_intensity = np.random.uniform(0, 1)
+    random_fog_intensity = np.random.uniform(0.4, 0.95)
     Fog = Fog.clamp(0, 1) * random_fog_intensity
 
     return Fog

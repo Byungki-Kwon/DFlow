@@ -54,25 +54,38 @@ class backDataset(data.Dataset):
 
 
 class COCO(backDataset):
-    def __init__(self, root="/local_data/kwon/dupdate_images/COCO/train2017"):
+    def __init__(self, ds, root="/local_data/kwon/dupdate_images/COCO/train2017"):
         super(COCO, self).__init__()
+        self.h_size = ds[1] + 300 
+        self.w_size = ds[0] + 300
+        self.crop_h_size = ds[1] + 200
+        self.crop_w_size = ds[0] + 200
+
         images = sorted(glob(osp.join(root, '*.jpg')))
         for i in range(len(images)):
             self.image_list += [images[i]]
 
 
 class OpenImages(backDataset):
-    def __init__(self, root="/local_data/kwon/dupdate_images/openimages"):
+    def __init__(self, ds, root="/local_data/kwon/dupdate_images/openimages"):
         super(OpenImages, self).__init__()
+        self.h_size = ds[1] + 300 
+        self.w_size = ds[0] + 300
+        self.crop_h_size = ds[1] + 200
+        self.crop_w_size = ds[0] + 200
+
         images = sorted(glob(osp.join(root, '*.jpg')))
         for i in range(len(images)):
             self.image_list += [images[i]]
 
 
 class DAVIS(backDataset):
-    def __init__(self, root="/local_data/kwon/dupdate_images/DAVIS/JPEGImages/Full-Resolution"):
-        super(DAVIS, self).__init__()
-
+    def __init__(self, ds, root="/local_data/kwon/dupdate_images/DAVIS/JPEGImages/Full-Resolution"):
+        super(DAVIS, self).__init__()        
+        self.h_size = ds[1] + 300 
+        self.w_size = ds[0] + 300
+        self.crop_h_size = ds[1] + 200
+        self.crop_w_size = ds[0] + 200
         for scene in os.listdir(root):
             image_list = sorted(glob(osp.join(root, scene, "*.jpg")))
             for i in range(len(image_list)):
@@ -80,8 +93,12 @@ class DAVIS(backDataset):
 
 
 class MonKaa(backDataset):
-    def __init__(self, root="/local_data/kwon/dupdate_images/monkaa_finalpass"):
-        super(MonKaa, self).__init__()
+    def __init__(self, ds, root="/local_data/kwon/dupdate_images/monkaa_finalpass"):
+        super(MonKaa, self).__init__()        
+        self.h_size = ds[1] + 300 
+        self.w_size = ds[0] + 300
+        self.crop_h_size = ds[1] + 200
+        self.crop_w_size = ds[0] + 200
 
         for scene in os.listdir(root):
             image_list = sorted(glob(osp.join(root, scene, "left", "*.png")))
@@ -89,15 +106,15 @@ class MonKaa(backDataset):
                 self.image_list += [image_list[i]]
 
 
-def back_dataloader():
+def back_dataloader(ds):
 
-    coco_data = COCO()
+    coco_data = COCO(ds)
     print('Use %d COCO as background!' % len(coco_data))
-    openimages_data = OpenImages()
+    openimages_data = OpenImages(ds)
     print('Use %d OpenImages as background!' % len(openimages_data))
-    davis_data = DAVIS()
+    davis_data = DAVIS(ds)
     print('Use %d DAVIS as background!' % len(davis_data))
-    monkaa_data = MonKaa()
+    monkaa_data = MonKaa(ds)
     print('Use %d MonKaa as background!' % len(monkaa_data))
     total_dataset = coco_data + openimages_data + davis_data + monkaa_data
     back_loader = data.DataLoader(total_dataset, num_workers=0, batch_size=1+8+4, pin_memory=False, shuffle=True, drop_last=True)
